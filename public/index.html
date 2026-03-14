@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Результати змагань</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="container">
+        <h1>Результати змагань (Live)</h1>
+        
+        <div class="controls">
+            <h3>Відображення стовпчиків:</h3>
+            <div id="column-toggles" class="toggles-grid"></div>
+        </div>
+
+        <div class="table-responsive">
+            <table id="results-table">
+                <thead>
+                    <tr id="table-head"></tr>
+                </thead>
+                <tbody id="table-body"></tbody>
+            </table>
+        </div>
+    </div>
+
+    <script>
+        let currentData = [];
+        let columns = [];
+        let hiddenColumns = new Set();
+        let sortCol = null;
+        let sortAsc = true;
+
+        async function fetchData() {
+            try {
+                const response = await fetch('/api/get');
+                if (response.ok) {
+                    const data = await response.json();
+                    if (data.rows && data.rows.length > 0) {
+                        currentData = data.rows;
+                        if (columns.length === 0) {
+                            columns = Object.keys(data.rows[0]);
+                            renderControls();
+                        }
+                        renderTable();
+                    }
+                }
+            } catch (error) {
+                console.error('Помилка завантаження даних:', error);
+            }
+        }
+
+        function renderControls() {
+            const container = document.getElementById('column-toggles');
+            container.innerHTML = '';
+            columns.forEach(col => {
+                const label = document.createElement('label');
+                const checkbox = document.createElement('input');
+                checkbox.type = 'checkbox';
+                checkbox.checked = true;
+                checkbox.addEventListener('change', (e) => {
+                    if (e.target.checked) hiddenColumns.delete(col);
+                    else hiddenColumns.add(col);
+                    renderTable();
+                });
+                label.appendChild(checkbox);
+                label.appendChild(document.createTextNode(' ' + col));
+                container.appendChild(label);
+            });
+        }
+
+        function handleSort(col) {
+            if (sortCol === col) {
+                sortAsc = !sortAsc;
+            } else {
+                sortCol = col;
+                sortAsc = true;
+            }
+            renderTable();
+        }
+
+        function renderTable() {
+            const thead = document.getElementById('table-head');
+            const tbody = document.getElementById('table-body');
+            thead.innerHTML = '';
+            tbody.innerHTML = '';
+
+            // Рендер заголовків
+            columns.forEach(col => {
+                if (hiddenColumns.has(col)) return;
+                const th = document.createElement('th');
+                th.innerText = col + (sortCol === col ? (sortAsc ? ' 🔼' : ' 🔽') : '');
+                th.onclick = () => handleSort(col);
+                thead.appendChild(th);
+            });
+
+            // Сортування даних
+            let displayData = [...currentData];
+            if (sortCol) {
+                displayData.sort((a, b) => {
+                    let valA = a[sortCol];
+                    let valB = b[sortCol];
+                    
+                    // Спроба конвертувати в числа для коректного числового сортування
+                    if (!isNaN(valA) && !isNaN(valB)) {
+                        valA = Number(valA);
+                        valB = Number(valB);
+                    }
+                    
+                    if (valA < valB) return sortAsc ? -1 : 1;
+                    if (valA > valB) return sortAsc ? 1 : -1;
+                    return 0;
+                });
+            }
+
+            // Рендер рядків
+            displayData.forEach(row => {
+                const tr = document.createElement('tr');
+                columns.forEach(col => {
+                    if (hiddenColumns.has(col)) return;
+                    const td = document.createElement('td');
+                    td.innerText = row[col] !== null ? row[col] : '';
+                    tr.appendChild(td);
+                });
+                tbody.appendChild(tr);
+            });
+        }
+
+        // Ініціалізація та SSE (Real-time)
+        fetchData();
+        const eventSource = new EventSource('/api/events');
+        eventSource.onmessage = (event) => {
+            const msg = JSON.parse(event.data);
+            if (msg.type === 'update') {
+                fetchData();
+            }
+        };
+    </script>
+</body>
+</html>
