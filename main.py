@@ -3,7 +3,7 @@ import xml.etree.ElementTree as ET
 import threading
 import os
 
-app = Flask(__name__, templete_folder='public', static_folder='public')
+app = Flask(__name__, template_folder='public', static_folder='public')
 
 # Сховище в пам'яті для роздільних даних
 data_store = {
