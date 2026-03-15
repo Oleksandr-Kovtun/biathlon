@@ -1,68 +1,82 @@
-from fastapi import FastAPI, Request, HTTPException
-from fastapi.responses import StreamingResponse
-from fastapi.staticfiles import StaticFiles
-import uvicorn
-import asyncio
-import json
-import os
+from flask import Flask, request, jsonify, render_template
+import xml.etree.ElementTree as ET
+import threading
 
-app = FastAPI()
+app = Flask(__name__)
 
-# Глобальна змінна для зберігання останніх даних у пам'яті
-latest_data = None
-# Список черг для сповіщення підключених веб-клієнтів
-clients = []
+# Сховище в пам'яті та замок для безпеки потоків
+data_store = {
+    "last_json": None,
+    "last_xml_raw": None,
+    "table_data": []  # Оброблений список для веб-сторінки
+}
+data_lock = threading.Lock()
 
-@app.post("/api/push")
-async def push_data(request: Request):
-    global latest_data
+def parse_xml(xml_string):
+    """Конвертує XML у зручний список словників"""
     try:
-        data = await request.json()
-        
-        # Атомарне оновлення посилання на дані
-        latest_data = data
-        
-        # Сповіщаємо всі підключені веб-сторінки про оновлення
-        for client_queue in clients:
-            await client_queue.put("update")
-            
-        return {"success": True, "message": "Дані успішно оновлено"}
+        root = ET.fromstring(xml_string)
+        lanes = []
+        for idx, lane in enumerate(root.findall('lane'), 1):
+            lane_dict = {
+                "lane_id": f"lane{idx:02d}",
+                "number": lane.find('number').text or "",
+                "shots": lane.find('shots').text or "0",
+                "flaps": [
+                    lane.find('flap1').text,
+                    lane.find('flap2').text,
+                    lane.find('flap3').text,
+                    lane.find('flap4').text,
+                    lane.find('flap5').text
+                ]
+            }
+            lanes.append(lane_dict)
+        return lanes
     except Exception as e:
-        raise HTTPException(status_code=400, detail="Некоректний JSON")
+        print(f"XML Parse Error: {e}")
+        return []
 
-@app.get("/api/get")
-async def get_data():
-    if latest_data is None:
-        raise HTTPException(status_code=404, detail="Дані ще не надходили")
-    return latest_data
+@app.route('/api/push', methods=['POST'])
+def push_data():
+    content_type = request.headers.get('Content-Type')
+    
+    with data_lock:
+        if 'application/json' in content_type:
+            raw_data = request.json
+            data_store["last_json"] = raw_data
+            # Трансформація JSON для таблиці
+            table_results = []
+            for key, val in raw_data.items():
+                table_results.append({
+                    "lane_id": key,
+                    "number": val.get("number"),
+                    "shots": val.get("shots"),
+                    "flaps": [val["flaps"][f"flap{i}"] for i in range(1, 6)]
+                })
+            data_store["table_data"] = table_results
+            
+        elif 'application/xml' in content_type or 'text/xml' in content_type:
+            raw_xml = request.data.decode('utf-8')
+            data_store["last_xml_raw"] = raw_xml
+            data_store["table_data"] = parse_xml(raw_xml)
+            
+        else:
+            return "Unsupported Media Type", 415
+            
+    return "Data updated", 200
 
-# Ендпоінт для Server-Sent Events (Real-time оновлення для браузера)
-@app.get("/api/events")
-async def sse_endpoint(request: Request):
-    client_queue = asyncio.Queue()
-    clients.append(client_queue)
+@app.route('/api/get', methods=['GET'])
+def get_data():
+    with data_lock:
+        return jsonify({
+            "json": data_store["last_json"],
+            "xml": data_store["last_xml_raw"]
+        })
 
-    async def event_generator():
-        try:
-            while True:
-                # Якщо клієнт відключився, припиняємо генерацію
-                if await request.is_disconnected():
-                    break
-                
-                # Очікуємо сигнал про оновлення від POST /api/push
-                message = await client_queue.get()
-                yield f"data: {json.dumps({'type': message})}\n\n"
-        except asyncio.CancelledError:
-            pass
-        finally:
-            clients.remove(client_queue)
+@app.route('/')
+def index():
+    with data_lock:
+        return render_template('index.html', results=data_store["table_data"])
 
-    return StreamingResponse(event_generator(), media_type="text/event-stream")
-
-# Створюємо папку public, якщо її немає, і роздаємо статику
-os.makedirs("public", exist_ok=True)
-app.mount("/", StaticFiles(directory="public", html=True), name="public")
-
-if __name__ == "__main__":
-    # Запуск сервера
-    uvicorn.run("main:app", host="0.0.0.0", port=3000, reload=True)
+if __name__ == '__main__':
+    app.run(host='0.0.0.0', port=5000, debug=True)
