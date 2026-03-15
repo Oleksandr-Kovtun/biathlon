@@ -1,71 +1,18 @@
-body {
-    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-    background-color: #f4f7f6;
-    color: #333;
-    margin: 0;
-    padding: 20px;
-}
+body { font-family: sans-serif; background: #f4f4f9; padding: 20px; }
+table { border-collapse: collapse; width: 100%; background: white; }
+th, td { border: 1px solid #ddd; padding: 12px; text-align: center; }
+th { background-color: #333; color: white; cursor: pointer; }
 
-.container {
-    max-width: 98%;
-    margin: 0 auto;
-    background: #fff;
-    padding: 20px;
-    border-radius: 8px;
-    box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+/* Стиль мішеней */
+.flap-container { display: flex; justify-content: center; gap: 5px; }
+.circle {
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    border: 2px solid #333;
 }
+.hit { background-color: white; }    /* flap 1 - білий */
+.miss { background-color: #333; }   /* flap 0 - темний */
 
-.controls {
-    margin-bottom: 20px;
-    padding: 15px;
-    background: #eef2f5;
-    border-radius: 6px;
-}
-
-.toggles-grid {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 15px;
-}
-
-.toggles-grid label {
-    cursor: pointer;
-    font-size: 14px;
-    user-select: none;
-}
-
-.table-responsive {
-    overflow-x: auto;
-}
-
-table {
-    width: 100%;
-    border-collapse: collapse;
-    margin-top: 10px;
-}
-
-th, td {
-    padding: 12px 15px;
-    border: 1px solid #ddd;
-    text-align: left;
-    white-space: nowrap;
-}
-
-th {
-    background-color: #0056b3;
-    color: white;
-    cursor: pointer;
-    transition: background-color 0.2s;
-}
-
-th:hover {
-    background-color: #004494;
-}
-
-tr:nth-child(even) {
-    background-color: #f8f9fa;
-}
-
-tr:hover {
-    background-color: #f1f3f5;
-}
+.hidden { display: none; }
+.controls { margin-bottom: 20px; }
